@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SECRTVID 3.0</title>
+
+<style>
+body{
+margin:0;
+background:#0f0f0f;
+font-family:Arial,sans-serif;
+color:#fff;
+}
+
+header{
+display:flex;
+justify-content:space-between;
+align-items:center;
+padding:15px;
+background:#000;
+position:sticky;
+top:0;
+}
+
+button{
+border:none;
+padding:10px 15px;
+border-radius:8px;
+cursor:pointer;
+font-weight:bold;
+}
+
+#loginBtn{
+background:#4285F4;
+color:white;
+}
+
+#uploadBtn{
+background:#00c853;
+color:white;
+display:none;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+gap:15px;
+padding:15px;
+}
+
+.card{
+background:#1a1a1a;
+border-radius:12px;
+overflow:hidden;
+}
+
+.card video{
+width:100%;
+}
+
+.card h3{
+padding:10px;
+margin:0;
+}
+
+.popup{
+position:fixed;
+inset:0;
+background:rgba(0,0,0,.8);
+display:none;
+justify-content:center;
+align-items:center;
+}
+
+.box{
+background:#1f1f1f;
+padding:20px;
+border-radius:12px;
+width:90%;
+max-width:400px;
+}
+
+input{
+width:100%;
+padding:10px;
+margin:10px 0;
+border:none;
+border-radius:8px;
+}
+</style>
+</head>
+<body>
+
+<header>
+<button id="uploadBtn">UPLOAD VIDEO</button>
+
+<input
+id="searchInput"
+type="text"
+placeholder="Cari video..."
+style="
+width:40%;
+padding:10px;
+border:none;
+border-radius:20px;
+background:#1f1f1f;
+color:white;
+">
+
+<h2>SECRTVID</h2>
+
+<button id="loginBtn">LOG IN</button>
+</header>
+
+<div class="grid" id="videoList"></div>
+
+<div class="popup" id="popup">
+<div class="box">
+
+<div style="display:flex;justify-content:space-between;align-items:center;">
+<h3>Upload Video</h3>
+<button id="closePopup"
+style="background:red;color:white;padding:5px 10px;">
+X
+</button>
+</div>
+
+<input type="text" id="videoName"
+placeholder="Nama Video">
+
+<input type="file" id="videoFile"
+accept="video/*">
+
+<button id="uploadSubmit">
+UPLOAD
+</button>
+</div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from
+"https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+
+import {
+getAuth,
+GoogleAuthProvider,
+signInWithPopup,
+onAuthStateChanged
+} from
+"https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+import {
+getFirestore,
+collection,
+addDoc,
+getDocs
+} from
+"https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+const firebaseConfig = {
+apiKey:"AIzaSyCP3FMLWE_sqYmwdodA-hxcUV933Jhybf4",
+authDomain:"vid-web.firebaseapp.com",
+projectId:"vid-web",
+storageBucket:"vid-web.firebasestorage.app",
+messagingSenderId:"863789984088",
+appId:"1:863789984088:web:3ee4e0e679892787e71d2d"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const provider = new GoogleAuthProvider();
+
+loginBtn.onclick=()=>{
+signInWithPopup(auth,provider);
+};
+
+onAuthStateChanged(auth,(user)=>{
+if(window.location.pathname.startsWith("/vid/")){
+document.querySelector("header").style.display="none";
+return;
+}
+if(user){
+loginBtn.style.display="none";
+uploadBtn.style.display="block";
+}else{
+loginBtn.style.display="block";
+uploadBtn.style.display="none";
+}
+});
+
+uploadBtn.onclick=()=>{
+popup.style.display="flex";
+};
+
+document
+.getElementById("closePopup")
+.onclick=()=>{
+
+popup.style.display="none";
+
+videoName.value="";
+videoFile.value="";
+
+};
+
+window.uploadVideo = async ()=>{
+
+const name = document.getElementById("videoName").value;
+const file = document.getElementById("videoFile").files[0];
+
+if(!name || !file){
+alert("Lengkapi data!");
+return;
+}
+
+const formData = new FormData();
+formData.append("file", file);
+formData.append("upload_preset", "web vid");
+
+try{
+
+const res = await fetch(
+"https://api.cloudinary.com/v1_1/dajyrymp3/video/upload",
+{
+method:"POST",
+body:formData
+});
+
+const data = await res.json();
+
+console.log(data);
+
+if(data.error){
+alert(data.error.message);
+return;
+}
+
+const slug = name
+.toLowerCase()
+.trim()
+.replace(/\s+/g,"-")
+.replace(/[^a-z0-9-]/g,"");
+
+await addDoc(
+collection(db,"videos"),
+{
+name,
+slug,
+url:data.secure_url,
+createdAt:Date.now()
+}
+);
+
+alert("Video berhasil diupload!");
+
+popup.style.display="none";
+
+videoName.value="";
+videoFile.value="";
+
+loadVideos();
+
+}catch(err){
+console.log(err);
+alert("Upload gagal!");
+}
+
+};
+
+window.copyLink = async function(slug){
+
+const url = `${window.location.origin}/vid/${slug}`;
+
+try{
+await navigator.clipboard.writeText(url);
+alert("Link berhasil disalin!");
+}catch(e){
+
+const input = document.createElement("input");
+input.value = url;
+document.body.appendChild(input);
+input.select();
+document.execCommand("copy");
+document.body.removeChild(input);
+
+alert("Link berhasil disalin!");
+}
+
+}
+
+document
+.getElementById("uploadSubmit")
+.addEventListener("click", uploadVideo);
+
+document
+.getElementById("searchInput")
+.addEventListener("input",(e)=>{
+
+const keyword =
+e.target.value.toLowerCase();
+
+videoList.innerHTML="";
+
+allVideos
+.filter(v=>
+v.name.toLowerCase()
+.includes(keyword)
+)
+.forEach(data=>{
+
+videoList.innerHTML += `
+<div class="card">
+<video controls src="${data.url}"></video>
+<h3>${data.name}</h3>
+
+<button onclick="copyLink('${data.slug}')"
+style="
+width:90%;
+margin:10px;
+background:#2196F3;
+color:white;
+">
+SALIN LINK
+</button>
+
+</div>
+`;
+
+});
+
+});
+
+if (!window.location.pathname.startsWith("/vid/")) {
+    loadVideos();
+}
+
+let allVideos = [];
+
+async function loadVideos(){
+
+const snap =
+await getDocs(collection(db,"videos"));
+
+videoList.innerHTML="";
+allVideos=[];
+
+snap.forEach(doc=>{
+
+const data = doc.data();
+allVideos.push(data);
+
+videoList.innerHTML += `
+<div class="card">
+<video controls src="${data.url}"></video>
+<h3>${data.name}</h3>
+
+<button onclick="copyLink('${data.slug}')"
+style="
+width:90%;
+margin:10px;
+background:#2196F3;
+color:white;
+">
+SALIN LINK
+</button>
+
+</div>
+`;
+
+});
+
+}
+
+const path = window.location.pathname;
+
+if (path.startsWith("/vid/")) {
+
+    const slug = path.split("/vid/")[1];
+
+    const snap = await getDocs(collection(db, "videos"));
+
+    snap.forEach(doc => {
+        const data = doc.data();
+
+        if (data.slug === slug) {
+            videoList.innerHTML = `
+            <div class="card">
+                <video controls autoplay src="${data.url}"></video>
+                <h3>${data.name}</h3>
+            </div>
+            `;
+        }
+    });
+
+} else {
+    loadVideos();
+}
+
+</script>
+
+</body>
+</html>
